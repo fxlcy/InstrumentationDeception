@@ -4,23 +4,15 @@
     <application>
         <activity
             android:name="cn.fxlcy.stub.ActivityStub$Standard"
-            android:launchMode="standard">
-            <meta-data android:name="placeholder" android:value="true" />
-        </activity>
+            android:launchMode="standard" />
         <activity
             android:name="cn.fxlcy.stub.ActivityStub$SingleTop"
-            android:launchMode="singleTop">
-            <meta-data android:name="placeholder" android:value="true" />
-        </activity>
+            android:launchMode="singleTop" />
         <activity
             android:name="cn.fxlcy.stub.ActivityStub$SingleTask"
-            android:launchMode="singleTask" >
-            <meta-data android:name="placeholder" android:value="true" />
-        </activity>
+            android:launchMode="singleTask" />
         <activity
             android:name="cn.fxlcy.stub.ActivityStub$SingleInstance"
-            android:launchMode="singleInstance">
-            <meta-data android:name="placeholder" android:value="true" />
-        </activity>
+            android:launchMode="singleInstance" />
     </application>
 </manifest>

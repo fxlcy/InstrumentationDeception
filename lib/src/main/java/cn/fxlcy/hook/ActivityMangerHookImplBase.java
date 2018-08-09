@@ -4,26 +4,32 @@ import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.util.Log;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
+import cn.fxlcy.anno.LaunchMode;
 import cn.fxlcy.stub.ActivityStub;
 import cn.fxlcy.util.Lazy;
 import cn.fxlcy.util.NavUtils;
 import cn.fxlcy.util.ReflectUtils;
+
+import static cn.fxlcy.util.NavUtils.IS_REGISTER_ON_MANIFEST_TAG;
 
 /**
  * Created by fxlcy on 18-8-8.
  */
 
 public class ActivityMangerHookImplBase implements IIActivityMangerHook {
+    protected final static String TAG = "ActivityMangerHook";
+
     private Context mContext;
     private Field mSingletonField;
     private Object mDefaultInstance;
@@ -112,7 +118,7 @@ public class ActivityMangerHookImplBase implements IIActivityMangerHook {
         }
 
         Object proxy = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), am.getClass().getInterfaces(),
-                new IActivityMangerProxy(am));
+                new IActivityMangerHandler(am));
         hookIActivityManger(proxy);
     }
 
@@ -217,28 +223,64 @@ public class ActivityMangerHookImplBase implements IIActivityMangerHook {
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
             if ("getActivityInfo".equals(method.getName())) {
                 try {
-                    return method.invoke(iPackageManager, args);
-                } catch (Throwable e) {
-                    for (int i = 0; i < args.length; i++) {
-                        if (args[i] instanceof ComponentName) {
-                            ComponentName componentName = new ComponentName(mContext.getPackageName()
-                                    , ActivityStub.Standard.class.getName());
-                            args[i] = componentName;
-                        }
+                    ActivityInfo ai = (ActivityInfo) method.invoke(iPackageManager, args);
+                    if (ai == null) {
+                        return hook(method, args);
+                    } else {
+                        return ai;
                     }
+                } catch (Throwable e) {
+                    return hook(method, args);
                 }
-
             }
             return method.invoke(iPackageManager, args);
         }
+
+        private ActivityInfo hook(Method method, Object[] args) throws Throwable {
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] instanceof ComponentName) {
+                    ComponentName old = (ComponentName) args[i];
+                    Class<?> clazz = null;
+                    try {
+                        clazz = Class.forName(old.getClassName());
+                    } catch (Throwable ignored) {
+                    }
+
+                    ComponentName componentName;
+                    if (clazz == null) {
+                        componentName = new ComponentName(mContext.getPackageName()
+                                , ActivityStub.Standard.class.getName());
+                    } else {
+                        LaunchMode launchMode = clazz.getAnnotation(LaunchMode.class);
+                        if (launchMode == null) {
+                            componentName = new ComponentName(mContext.getPackageName()
+                                    , ActivityStub.Standard.class.getName());
+                        } else {
+                            componentName = new ComponentName(mContext.getPackageName()
+                                    , launchMode.value().getActivityType().getName());
+                        }
+                    }
+                    args[i] = componentName;
+                }
+            }
+
+            ActivityInfo ai = (ActivityInfo) method.invoke(iPackageManager, args);
+
+            Bundle data = ai.metaData;
+            if (data == null) {
+                data = new Bundle();
+                ai.metaData = data;
+            }
+            data.putBoolean(IS_REGISTER_ON_MANIFEST_TAG, true);
+
+            return ai;
+        }
     }
 
-    private class IActivityMangerProxy implements InvocationHandler {
-        private final static String TAG = "IActivityMangerProxy";
-
+    private class IActivityMangerHandler implements InvocationHandler {
         private Object mActivityManger;
 
-        public IActivityMangerProxy(Object activityManager) {
+        public IActivityMangerHandler(Object activityManager) {
             this.mActivityManger = activityManager;
         }
 
@@ -250,12 +292,10 @@ public class ActivityMangerHookImplBase implements IIActivityMangerHook {
                     Object arg = args[i];
                     if (arg instanceof Intent) {
                         Intent intent = (Intent) arg;
-                        Log.i("TAG", intent.getComponent().getClassName());
                         if (NavUtils.isRegisterOnManifest(mContext, intent.getComponent())) {
-                            Log.i("TAG", intent.getComponent().getClassName() + "true");
                             return method.invoke(mActivityManger, args);
                         }
-                        intent = (Intent) ((Intent) arg).clone();
+                        intent = (Intent) intent.clone();
                         ComponentName componentName = new ComponentName(mContext
                                 , ActivityStub.Standard.class);
                         intent.setComponent(componentName);
